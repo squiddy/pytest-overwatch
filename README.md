@@ -3,8 +3,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **pytest-overwatch** is a Jest inspired interactive test runner plugin for
-*pytest. It reruns tests whenever files change and allows you to select a
-*subset of tests to run.
+pytest. It reruns tests whenever files change and allows you to select a
+subset of tests to run.
 
 **Work in progress!**
 

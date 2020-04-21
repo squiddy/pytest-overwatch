@@ -57,15 +57,23 @@ class Application:
             self.selected_tests = self.collected_tests
             return
         else:
-            self.selected_tests = [
-                name
-                for name in self.collected_tests
-                if re.search(self.testname_filter, name)
-            ]
+            try:
+                r = re.compile(self.testname_filter)
+            except Exception:
+                filter_valid = False
+            else:
+                self.selected_tests = [
+                    name
+                    for name in self.collected_tests
+                    if re.search(self.testname_filter, name)
+                ]
+                filter_valid = True
 
             self.output.clear_entire_line()
             self.output.print("pattern › ", fg=37, end="")
-            self.output.print(self.testname_filter, fg=97, end="")
+            self.output.print(
+                self.testname_filter, fg=97 if filter_valid else 91, end=""
+            )
             self.output.save_cursor()
             self.output.clear_below()
             self.output.print("\n")

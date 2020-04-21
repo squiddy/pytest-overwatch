@@ -13,8 +13,6 @@ from contextlib import contextmanager
 from multiprocessing import Pipe, Process
 
 from asyncinotify import Inotify, Mask
-from prompt_toolkit import HTML, print_formatted_text
-from prompt_toolkit.shortcuts import clear
 
 
 def pytest_addoption(parser):
@@ -45,6 +43,7 @@ class Application:
         self.loop = asyncio.get_event_loop()
         self.should_quit = False
         self.mode = None
+        self.output = Output()
 
         self.worker_task = None
         self.worker_process = None
@@ -64,20 +63,16 @@ class Application:
                 if re.search(self.testname_filter, name)
             ]
 
-            sys.stdout.write("\r\x1b[2K")
-            print_formatted_text(
-                HTML(f"""<ansigray>pattern › </ansigray>{self.testname_filter}"""),
-                end="",
-            )
-            sys.stdout.write("\x1b7")
-            sys.stdout.write("\x1b[J")
-            print("")
-            print("")
+            self.output.clear_entire_line()
+            self.output.print("pattern › ", fg=37, end="")
+            self.output.print(self.testname_filter, fg=97, end="")
+            self.output.save_cursor()
+            self.output.clear_below()
+            self.output.print("\n")
             for name in self.selected_tests[:20]:
-                print(f"  {name}")
-            print(f"\n{len(self.selected_tests)} matches")
-            sys.stdout.write("\x1b8")
-            sys.stdout.flush()
+                self.output.print(f"  {name}")
+            self.output.print(f"\n{len(self.selected_tests)} matches")
+            self.output.restore_cursor()
 
     async def collect_tests(self):
         connection, child_connection = Pipe()
@@ -114,7 +109,7 @@ main(Connection({child_connection.fileno()}))"""
         self.worker_process.send_signal(signal.SIGINT)
 
     async def run_tests(self):
-        clear()
+        self.output.clear()
 
         connection, child_connection = Pipe()
         code = f"""
@@ -169,32 +164,30 @@ main(Connection({child_connection.fileno()}))"""
 
     def start_filename_filter(self):
         self.mode = MODE_FILTER
-        clear()
-        print_formatted_text(
-            HTML(
-                f"""
-<b>Pattern Mode Usage</b><ansigray>
-› Press <ansiwhite>Esc</ansiwhite> to exit pattern mode.
-› Press <ansiwhite>Enter</ansiwhite> to filter.
-
-pattern › </ansigray>{self.testname_filter}"""
-            ),
-            end=None,
-        )
+        self.output.clear()
+        self.output.print("Watch Usage", fg=97, bold=True)
+        self.output.print("› Press ", fg=37, end="")
+        self.output.print("ESC ", fg=97, end="")
+        self.output.print("to exit pattern mode.", fg=37)
+        self.output.print("› Press ", fg=37, end="")
+        self.output.print("Enter ", fg=97, end="")
+        self.output.print("to filter.\n", fg=37)
+        self.output.print("pattern › ", fg=37, end="")
+        self.output.print(self.testname_filter, fg=97, end="")
 
     def show_menu(self):
         self.mode = MODE_START
-        clear()
-        print_formatted_text(
-            HTML(
-                """
-<b>Watch Usage</b><ansigray>
-› Press <ansiwhite>a</ansiwhite> to run all tests.
-› Press <ansiwhite>p</ansiwhite> to run tests based on filename.
-› Press <ansiwhite>q</ansiwhite> to quit watch mode.
-</ansigray>"""
-            )
-        )
+        self.output.clear()
+        self.output.print("Watch Usage", fg=97, bold=True)
+        self.output.print("› Press ", fg=37, end="")
+        self.output.print("a ", fg=97, end="")
+        self.output.print("to run all tests.", fg=37)
+        self.output.print("› Press ", fg=37, end="")
+        self.output.print("p ", fg=97, end="")
+        self.output.print("to run tests based on filename.", fg=37)
+        self.output.print("› Press ", fg=37, end="")
+        self.output.print("q ", fg=97, end="")
+        self.output.print("to quit.\n", fg=37)
 
     async def watch_file_changes(self):
         with Inotify() as inotify:
@@ -234,6 +227,48 @@ pattern › </ansigray>{self.testname_filter}"""
                     await asyncio.sleep(0.1)
         finally:
             watcher.cancel()
+
+
+class Output:
+    """
+    Abstract away terminal output handling.
+    """
+
+    def __init__(self):
+        self._stream = sys.stdout
+
+    def clear(self):
+        self._stream.write("\x1b[2J")
+        self._stream.write("\x1b[0;0H")
+        self._stream.flush()
+
+    def clear_entire_line(self):
+        self._stream.write("\r\x1b[2K")
+        self._stream.flush()
+
+    def clear_below(self):
+        self._stream.write("\x1b[J")
+        self._stream.flush()
+
+    def save_cursor(self):
+        self._stream.write("\x1b7")
+        self._stream.flush()
+
+    def restore_cursor(self):
+        self._stream.write("\x1b8")
+        self._stream.flush()
+
+    def print(self, text, fg=None, bold=False, end="\n"):
+        if not fg and not bold:
+            self._stream.write(f"{text}{end}")
+            return
+
+        self._stream.write(f"\x1b[{fg}m")
+        if bold:
+            self._stream.write("\x1b[1m")
+
+        self._stream.write(f"{text}\x1b[0m{end}")
+        self._stream.flush()
 
 
 class Input:

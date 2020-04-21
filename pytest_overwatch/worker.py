@@ -12,7 +12,7 @@ def main(connection):
         config.option.collectonly = True
         config.option.verbose = 0
     elif command == "run":
-        if rest:
+        if rest and rest[0]:
             config.option.file_or_dir = rest[0]
             config.args = rest[0]
 

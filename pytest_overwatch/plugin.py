@@ -9,6 +9,7 @@ import sys
 import termios
 import time
 import tty
+from contextlib import contextmanager
 from multiprocessing import Pipe, Process
 
 from asyncinotify import Inotify, Mask
@@ -226,7 +227,7 @@ pattern › </ansigray>{self.testname_filter}"""
         input_.set_callback(self.handle_keypress)
 
         try:
-            with input_:
+            with input_.activate():
                 self.show_menu()
 
                 while not self.should_quit:
@@ -236,20 +237,26 @@ pattern › </ansigray>{self.testname_filter}"""
 
 
 class Input:
+    """
+    Abstract away terminal input handling.
+    """
+
     def __init__(self, loop):
         self._buffer = []
         self._callback = None
-        self._old_terminal_attrs = None
-
         self._auto_flush_task = None
         self._loop = loop
-        self._loop.add_reader(sys.stdin.fileno(), self._handle_input)
+        self._stream = sys.stdin
 
     def _handle_input(self):
         key = sys.stdin.read(1)
         self._buffer.append(key)
 
         if key == "\x1b":
+            # We don't know yet whether the user actually pressed escape, or
+            # whether this is the start of a escape sequence.
+            # Therefore we wait a bit to collect more input, otherwise we flush
+            # the keys.
             if self._auto_flush_task:
                 self._auto_flush_task.cancel()
             self._auto_flush_task = self._loop.call_later(0.1, self._flush_keys)
@@ -257,6 +264,7 @@ class Input:
             self._flush_keys()
 
     def _flush_keys(self):
+        # TODO: Doesn't actually handle escape sequences yet.
         key = self._buffer[:]
         self._buffer.clear()
 
@@ -266,12 +274,23 @@ class Input:
         self._callback(key)
 
     def set_callback(self, callback):
+        """
+        Register function to be called whenever keypress is detected.
+        """
         self._callback = callback
 
-    def __enter__(self):
-        self._old_terminal_attrs = termios.tcgetattr(sys.stdin)
-        tty.setcbreak(sys.stdin.fileno())
-        return self
+    @contextmanager
+    def activate(self):
+        """
+        Enter cbreak mode which disables (among other things) line buffering
+        and allows us to read input as it comes.
+        """
+        old_terminal_attrs = termios.tcgetattr(self._stream)
+        tty.setcbreak(self._stream.fileno())
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._old_terminal_attrs)
+        self._loop.add_reader(self._stream.fileno(), self._handle_input)
+
+        yield self
+
+        self._loop.remove_reader(self._stream.fileno())
+        termios.tcsetattr(self._stream, termios.TCSADRAIN, old_terminal_attrs)

@@ -44,6 +44,7 @@ class Application:
         self.should_quit = False
         self.mode = None
         self.output = Output()
+        self.input = Input(self.loop)
 
         self.worker_task = None
         self.worker_process = None
@@ -138,6 +139,19 @@ main(Connection({child_connection.fileno()}))"""
             ("run", self.config.args, vars(self.config.option), self.selected_tests)
         )
 
+        while True:
+            # TODO this never ends if the worker dies
+            if connection.poll(0.1):
+                data = connection.recv()
+                if data == "sessionfinish":
+                    break
+                elif data == "enter_pdb":
+                    self.input.stop()
+                elif data == "leave_pdb":
+                    self.input.start()
+                else:
+                    raise Exception(f"Unexpected data: {data}")
+
         await self.worker_process.wait()
         self.worker_process = None
 
@@ -224,11 +238,10 @@ main(Connection({child_connection.fileno()}))"""
 
         watcher = self.loop.create_task(self.watch_file_changes())
 
-        input_ = Input(self.loop)
-        input_.set_callback(self.handle_keypress)
+        self.input.set_callback(self.handle_keypress)
 
         try:
-            with input_.activate():
+            with self.input.activate():
                 self.show_menu()
 
                 while not self.should_quit:
@@ -290,6 +303,7 @@ class Input:
         self._auto_flush_task = None
         self._loop = loop
         self._stream = sys.stdin
+        self._old_terminal_attrs = None
 
     def _handle_input(self):
         key = sys.stdin.read(1)
@@ -322,18 +336,22 @@ class Input:
         """
         self._callback = callback
 
-    @contextmanager
-    def activate(self):
+    def start(self):
         """
         Enter cbreak mode which disables (among other things) line buffering
         and allows us to read input as it comes.
         """
-        old_terminal_attrs = termios.tcgetattr(self._stream)
+        self._old_terminal_attrs = termios.tcgetattr(self._stream)
         tty.setcbreak(self._stream.fileno())
 
         self._loop.add_reader(self._stream.fileno(), self._handle_input)
 
-        yield self
-
+    def stop(self):
         self._loop.remove_reader(self._stream.fileno())
-        termios.tcsetattr(self._stream, termios.TCSADRAIN, old_terminal_attrs)
+        termios.tcsetattr(self._stream, termios.TCSADRAIN, self._old_terminal_attrs)
+
+    @contextmanager
+    def activate(self):
+        self.start()
+        yield self
+        self.stop()

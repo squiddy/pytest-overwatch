@@ -7,3 +7,7 @@ def test_version():
 
 def test_foobar():
     assert 1 == 1
+
+
+def test_barbaz():
+    import pdb; pdb.set_trace()

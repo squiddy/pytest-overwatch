@@ -35,3 +35,12 @@ class Session:
             paths = {str(i.fspath) for i in items}
             self.connection.send(list(paths))
             return
+
+    def pytest_enter_pdb(self, config, pdb):
+        self.connection.send("enter_pdb")
+
+    def pytest_leave_pdb(self, config, pdb):
+        self.connection.send("leave_pdb")
+
+    def pytest_sessionfinish(self, session, exitstatus):
+        self.connection.send("sessionfinish")

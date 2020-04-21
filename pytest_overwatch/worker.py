@@ -4,17 +4,19 @@ from _pytest.config import Config
 
 def main(connection):
     command, args, option_dict, *rest = connection.recv()
+
     config = Config.fromdictargs(option_dict, list(args))
     config.args = args
 
-    tests = None
     if command == "collect":
         config.option.collectonly = True
         config.option.verbose = 0
     elif command == "run":
-        tests = rest[0] if rest[0] else None
+        if rest:
+            config.option.file_or_dir = rest[0]
+            config.args = rest[0]
 
-    Session(config, connection).main(tests)
+    Session(config, connection).main()
 
 
 class Session:
@@ -25,8 +27,7 @@ class Session:
         config.option.watch = False
         config.pluginmanager.register(self)
 
-    def main(self, tests):
-        self.tests = tests
+    def main(self):
         self.config.hook.pytest_cmdline_main(config=self.config)
 
     def pytest_collection_modifyitems(self, session, config, items):
@@ -34,6 +35,3 @@ class Session:
             paths = {str(i.fspath) for i in items}
             self.connection.send(list(paths))
             return
-
-        if self.tests:
-            items[:] = [item for item in items if str(item.fspath) in self.tests]

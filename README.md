@@ -13,7 +13,7 @@ subset of tests to run.
 - [x] re-run tests on file change
 - [x] select subset of tests based on filename
 - [ ] select subset of tests based on test name
-- [ ] support dropping into debugger on test failure
+- [x] support dropping into debugger on test failure
 
 ## In action
 

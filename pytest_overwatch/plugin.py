@@ -234,6 +234,10 @@ main(Connection({child_connection.fileno()}))"""
                     self.start_test_run()
 
     async def main(self):
+        capman = self.config.pluginmanager.getplugin("capturemanager")
+        if capman:
+            capman.suspend(in_=True)
+
         self.collected_tests = await self.collect_tests()
 
         watcher = self.loop.create_task(self.watch_file_changes())
@@ -248,6 +252,8 @@ main(Connection({child_connection.fileno()}))"""
                     await asyncio.sleep(0.1)
         finally:
             watcher.cancel()
+            if capman:
+                capman.resume()
 
 
 class Output:
@@ -302,7 +308,7 @@ class Input:
         self._callback = None
         self._auto_flush_task = None
         self._loop = loop
-        self._stream = sys.stdin
+        self._stream = None
         self._old_terminal_attrs = None
 
     def _handle_input(self):
@@ -341,6 +347,7 @@ class Input:
         Enter cbreak mode which disables (among other things) line buffering
         and allows us to read input as it comes.
         """
+        self._stream = sys.stdin
         self._old_terminal_attrs = termios.tcgetattr(self._stream)
         tty.setcbreak(self._stream.fileno())
 
@@ -349,6 +356,7 @@ class Input:
     def stop(self):
         self._loop.remove_reader(self._stream.fileno())
         termios.tcsetattr(self._stream, termios.TCSADRAIN, self._old_terminal_attrs)
+        self._stream = None
 
     @contextmanager
     def activate(self):

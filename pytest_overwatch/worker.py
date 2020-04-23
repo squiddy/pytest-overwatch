@@ -1,5 +1,9 @@
+import sys
+import time
+
 import pytest
 from _pytest.config import Config
+from _pytest.terminal import TerminalReporter
 
 
 def main(connection):
@@ -30,6 +34,17 @@ class Session:
     def main(self):
         self.config.hook.pytest_cmdline_main(config=self.config)
 
+    def pytest_plugin_registered(self, plugin, manager):
+        """
+        Replace default TerminalReporter with our own subclass of it.
+        """
+        name = "terminalreporter"
+        plugin = self.config.pluginmanager.get_plugin(name)
+        if type(plugin) is TerminalReporter:
+            self.config.pluginmanager.unregister(name=name)
+            reporter = Reporter(self.config, sys.stdout)
+            self.config.pluginmanager.register(reporter, name=name)
+
     def pytest_collection_modifyitems(self, session, config, items):
         if self.config.option.collectonly:
             paths = {str(i.fspath) for i in items}
@@ -44,3 +59,28 @@ class Session:
 
     def pytest_sessionfinish(self, session, exitstatus):
         self.connection.send("sessionfinish")
+
+
+class Reporter(TerminalReporter):
+    """
+    Currently disables some of the original reporters verbose output. Some of
+    that could be controlled using the verbosity setting, but that would also
+    affect the test result output, which I don't want to.
+
+    Will be extended later.
+    """
+    def pytest_sessionstart(self, session):
+        self._session = session
+        self._sessionstarttime = time.time()
+
+    def pytest_collection_finish(self, session):
+        pass
+
+    def pytest_collectreport(self, report):
+        pass
+
+    def report_collect(self, final=False):
+        pass
+
+    def pytest_collection(self):
+        pass

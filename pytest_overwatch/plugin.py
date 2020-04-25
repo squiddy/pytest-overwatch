@@ -172,6 +172,7 @@ main(Connection({child_connection.fileno()}))"""
                 self.show_menu()
         elif self.mode == MODE_FILTER:
             if key == "\x1b":
+                self.testname_filter = ''
                 self.show_menu()
             elif key == "\x7f":
                 self.testname_filter = self.testname_filter[:-1]

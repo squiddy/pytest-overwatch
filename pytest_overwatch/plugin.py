@@ -152,6 +152,8 @@ main(Connection({child_connection.fileno()}))"""
                 else:
                     raise Exception(f"Unexpected data: {data}")
 
+            await asyncio.sleep(0.1)
+
         await self.worker_process.wait()
         self.worker_process = None
 

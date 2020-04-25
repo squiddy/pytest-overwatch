@@ -35,6 +35,7 @@ def pytest_cmdline_main(config):
 
 MODE_START = 1
 MODE_FILTER = 2
+MODE_TESTRUN = 3
 
 
 class Application:
@@ -61,27 +62,13 @@ class Application:
             try:
                 r = re.compile(self.testname_filter)
             except Exception:
-                filter_valid = False
+                pass
             else:
                 self.selected_tests = [
                     name
                     for name in self.collected_tests
                     if re.search(self.testname_filter, name)
                 ]
-                filter_valid = True
-
-            self.output.clear_entire_line()
-            self.output.print("pattern › ", fg=37, end="")
-            self.output.print(
-                self.testname_filter, fg=97 if filter_valid else 91, end=""
-            )
-            self.output.save_cursor()
-            self.output.clear_below()
-            self.output.print("\n")
-            for name in self.selected_tests[:20]:
-                self.output.print(f"  {name}")
-            self.output.print(f"\n{len(self.selected_tests)} matches")
-            self.output.restore_cursor()
 
     async def collect_tests(self):
         connection, child_connection = Pipe()
@@ -118,8 +105,6 @@ main(Connection({child_connection.fileno()}))"""
         self.worker_process.send_signal(signal.SIGINT)
 
     async def run_tests(self):
-        self.output.clear()
-
         connection, child_connection = Pipe()
         code = f"""
 from multiprocessing.connection import Connection
@@ -160,60 +145,99 @@ main(Connection({child_connection.fileno()}))"""
     def handle_keypress(self, key):
         if self.mode == MODE_START:
             if key == "q":
-                if self.worker_task:
-                    self.interrupt_test_run()
-                else:
-                    self.should_quit = True
+                self.should_quit = True
             elif key == "a":
                 self.start_test_run()
+                self.render_ui(MODE_TESTRUN)
             elif key == "p":
-                self.start_filename_filter()
+                self.render_ui(MODE_FILTER)
             elif key == "w":
-                self.show_menu()
+                self.render_ui(MODE_START)
+        elif self.mode == MODE_TESTRUN:
+            if key == "q":
+                if self.worker_process:
+                    self.interrupt_test_run()
+                else:
+                    self.render_ui(MODE_START)
+            elif key == "a":
+                self.start_test_run()
+                self.render_ui(MODE_TESTRUN)
+            elif key == "w":
+                if self.testname_filter:
+                    self.render_ui(MODE_FILTER)
+                else:
+                    self.render_ui(MODE_START)
         elif self.mode == MODE_FILTER:
             if key == "\x1b":
                 self.testname_filter = ''
-                self.show_menu()
+                self.render_ui(MODE_START)
             elif key == "\x7f":
                 self.testname_filter = self.testname_filter[:-1]
                 self.update_selected_tests()
+                self.render_ui()
             elif ord(key) in [10, 13]:
                 if self.selected_tests:
-                    self.mode = MODE_START
                     self.start_test_run()
+                    self.render_ui(MODE_TESTRUN)
             elif ord(key) < 32:
                 pass
             else:
                 self.testname_filter = self.testname_filter + key
                 self.update_selected_tests()
+                self.render_ui()
 
-    def start_filename_filter(self):
-        self.mode = MODE_FILTER
-        self.output.clear()
-        self.output.print("Watch Usage", fg=97, bold=True)
-        self.output.print("› Press ", fg=37, end="")
-        self.output.print("ESC ", fg=97, end="")
-        self.output.print("to exit pattern mode.", fg=37)
-        self.output.print("› Press ", fg=37, end="")
-        self.output.print("Enter ", fg=97, end="")
-        self.output.print("to filter.\n", fg=37)
-        self.output.print("pattern › ", fg=37, end="")
-        self.output.print(self.testname_filter, fg=97, end="")
-        self.update_selected_tests()
+    def render_ui(self, next_mode=None):
+        previous_mode = self.mode
+        self.mode = next_mode or previous_mode
 
-    def show_menu(self):
-        self.mode = MODE_START
-        self.output.clear()
-        self.output.print("Watch Usage", fg=97, bold=True)
-        self.output.print("› Press ", fg=37, end="")
-        self.output.print("a ", fg=97, end="")
-        self.output.print("to run all tests.", fg=37)
-        self.output.print("› Press ", fg=37, end="")
-        self.output.print("p ", fg=97, end="")
-        self.output.print("to run tests based on filename.", fg=37)
-        self.output.print("› Press ", fg=37, end="")
-        self.output.print("q ", fg=97, end="")
-        self.output.print("to quit.\n", fg=37)
+        if self.mode == MODE_START:
+            # The start menu
+            self.output.clear()
+            self.output.print("Watch Usage", fg=97, bold=True)
+            self.output.print("› Press ", fg=37, end="")
+            self.output.print("a ", fg=97, end="")
+            self.output.print("to run all tests.", fg=37)
+            self.output.print("› Press ", fg=37, end="")
+            self.output.print("p ", fg=97, end="")
+            self.output.print("to run tests based on filename.", fg=37)
+            self.output.print("› Press ", fg=37, end="")
+            self.output.print("q ", fg=97, end="")
+            self.output.print("to quit.\n", fg=37)
+        elif self.mode == MODE_TESTRUN:
+            self.output.clear()
+        elif self.mode == MODE_FILTER:
+            # The menu where you filter tests based on the filename
+            if self.mode != previous_mode:
+                self.output.clear()
+                self.output.print("Watch Usage", fg=97, bold=True)
+                self.output.print("› Press ", fg=37, end="")
+                self.output.print("ESC ", fg=97, end="")
+                self.output.print("to exit pattern mode.", fg=37)
+                self.output.print("› Press ", fg=37, end="")
+                self.output.print("Enter ", fg=97, end="")
+                self.output.print("to filter.\n", fg=37)
+                self.output.print("pattern › ", fg=37, end="")
+                self.output.print(self.testname_filter, fg=97, end="")
+
+            try:
+                r = re.compile(self.testname_filter)
+            except Exception:
+                filter_valid = False
+            else:
+                filter_valid = True
+
+            self.output.clear_entire_line()
+            self.output.print("pattern › ", fg=37, end="")
+            self.output.print(
+                self.testname_filter, fg=97 if filter_valid else 91, end=""
+            )
+            self.output.save_cursor()
+            self.output.clear_below()
+            self.output.print("\n")
+            for name in self.selected_tests[:20]:
+                self.output.print(f"  {name}")
+            self.output.print(f"\n{len(self.selected_tests)} matches")
+            self.output.restore_cursor()
 
     async def watch_file_changes(self):
         with Inotify() as inotify:
@@ -250,8 +274,7 @@ main(Connection({child_connection.fileno()}))"""
 
         try:
             with self.input.activate():
-                self.show_menu()
-
+                self.render_ui(MODE_START)
                 while not self.should_quit:
                     await asyncio.sleep(0.1)
         finally:

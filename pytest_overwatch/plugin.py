@@ -199,6 +199,7 @@ main(Connection({child_connection.fileno()}))"""
         self.output.print("to filter.\n", fg=37)
         self.output.print("pattern › ", fg=37, end="")
         self.output.print(self.testname_filter, fg=97, end="")
+        self.update_selected_tests()
 
     def show_menu(self):
         self.mode = MODE_START

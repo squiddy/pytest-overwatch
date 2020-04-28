@@ -92,7 +92,7 @@ main(Connection({child_connection.fileno()}))"""
         tests = connection.recv()
 
         await process.wait()
-        return tests
+        return sorted(tests)
 
     def start_test_run(self):
         if not self.worker_task:
@@ -169,7 +169,7 @@ main(Connection({child_connection.fileno()}))"""
                     self.render_ui(MODE_START)
         elif self.mode == MODE_FILTER:
             if key == "\x1b":
-                self.testname_filter = ''
+                self.testname_filter = ""
                 self.render_ui(MODE_START)
             elif key == "\x7f":
                 self.testname_filter = self.testname_filter[:-1]
@@ -234,9 +234,13 @@ main(Connection({child_connection.fileno()}))"""
             self.output.save_cursor()
             self.output.clear_below()
             self.output.print("\n")
-            for name in self.selected_tests[:20]:
-                self.output.print(f"  {name}")
-            self.output.print(f"\n{len(self.selected_tests)} matches")
+            for filepath in self.selected_tests[:20]:
+                filepath = pathlib.Path(filepath)
+                filepath = filepath.relative_to(self.config.rootdir)
+                self.output.print(f"  {filepath.parent}/", fg=37, end="")
+                self.output.print(filepath.name, fg=97)
+            self.output.print(f"\n  {len(self.selected_tests)}", fg=97, end="")
+            self.output.print(" matches", fg=37)
             self.output.restore_cursor()
 
     async def watch_file_changes(self):

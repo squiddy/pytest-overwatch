@@ -13,6 +13,7 @@ license = "MIT"
 [tool.poetry.dependencies]
 python = "^3.6.10"
 asyncinotify = "^1.0.0"
+rich = "^1.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

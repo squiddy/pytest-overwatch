@@ -7,12 +7,27 @@ import signal
 import subprocess
 import sys
 import termios
+import textwrap
 import time
 import tty
 from contextlib import contextmanager
 from multiprocessing import Pipe, Process
 
 from asyncinotify import Inotify, Mask
+from rich.console import Console
+from rich.style import Style
+from rich.theme import Theme
+
+
+theme = Theme(
+    {
+        "header": Style.parse("bright_white bold"),
+        "highlight": Style.parse("bright_white"),
+        "text": Style.parse("white"),
+        "filter_valid": Style.parse("bright_white"),
+        "filter_invalid": Style.parse("red"),
+    }
+)
 
 
 def pytest_addoption(parser):
@@ -44,7 +59,7 @@ class Application:
         self.loop = asyncio.get_event_loop()
         self.should_quit = False
         self.mode = None
-        self.output = Output()
+        self.output = Output(theme=theme)
         self.input = Input(self.loop)
 
         self.worker_task = None
@@ -192,32 +207,31 @@ main(Connection({child_connection.fileno()}))"""
 
         if self.mode == MODE_START:
             # The start menu
+            menu = textwrap.dedent(
+                """\
+                [header]Watch Usage[/]
+                › Press [highlight]a[/] to run all tests.
+                › Press [highlight]p[/] to run tests based on filename.
+                › Press [highlight]q[/] to quit.\n"""
+            )
             self.output.clear()
-            self.output.print("Watch Usage", fg=97, bold=True)
-            self.output.print("› Press ", fg=37, end="")
-            self.output.print("a ", fg=97, end="")
-            self.output.print("to run all tests.", fg=37)
-            self.output.print("› Press ", fg=37, end="")
-            self.output.print("p ", fg=97, end="")
-            self.output.print("to run tests based on filename.", fg=37)
-            self.output.print("› Press ", fg=37, end="")
-            self.output.print("q ", fg=97, end="")
-            self.output.print("to quit.\n", fg=37)
+            self.output.print(menu, style="text")
         elif self.mode == MODE_TESTRUN:
             self.output.clear()
         elif self.mode == MODE_FILTER:
             # The menu where you filter tests based on the filename
             if self.mode != previous_mode:
                 self.output.clear()
-                self.output.print("Watch Usage", fg=97, bold=True)
-                self.output.print("› Press ", fg=37, end="")
-                self.output.print("ESC ", fg=97, end="")
-                self.output.print("to exit pattern mode.", fg=37)
-                self.output.print("› Press ", fg=37, end="")
-                self.output.print("Enter ", fg=97, end="")
-                self.output.print("to filter.\n", fg=37)
-                self.output.print("pattern › ", fg=37, end="")
-                self.output.print(self.testname_filter, fg=97, end="")
+                menu = textwrap.dedent(
+                    """\
+                    [header]Watch Usage[/]
+                    › Press [highlight]ESC[/] to exit pattern mode.
+                    › Press [highlight]Enter[/] to filter.
+                    """
+                )
+                self.output.print(menu, style="text")
+                self.output.line()
+                self.output.print("pattern › ", style="text", end="")
 
             try:
                 r = re.compile(self.testname_filter)
@@ -227,20 +241,30 @@ main(Connection({child_connection.fileno()}))"""
                 filter_valid = True
 
             self.output.clear_entire_line()
-            self.output.print("pattern › ", fg=37, end="")
+            self.output.print("pattern › ", style="text", end="")
             self.output.print(
-                self.testname_filter, fg=97 if filter_valid else 91, end=""
+                self.testname_filter,
+                style="filter_valid" if filter_valid else "filter_invalid",
+                end="",
+                markup=False,  # don't interpret filter pattern as markup
             )
             self.output.save_cursor()
             self.output.clear_below()
-            self.output.print("\n")
-            for filepath in self.selected_tests[:20]:
-                filepath = pathlib.Path(filepath)
-                filepath = filepath.relative_to(self.config.rootdir)
-                self.output.print(f"  {filepath.parent}/", fg=37, end="")
-                self.output.print(filepath.name, fg=97)
-            self.output.print(f"\n  {len(self.selected_tests)}", fg=97, end="")
-            self.output.print(" matches", fg=37)
+            self.output.line(2)
+            if filter_valid:
+                for filepath in self.selected_tests[:20]:
+                    filepath = pathlib.Path(filepath)
+                    filepath = filepath.relative_to(self.config.rootdir)
+                    self.output.print(
+                        f"  {filepath.parent}/[highlight]{filepath.name}[/]",
+                        style="text",
+                    )
+                
+                self.output.line()
+                self.output.print(
+                    f"  [highlight]{len(self.selected_tests)}[/] matches",
+                    style="text",
+                )
             self.output.restore_cursor()
 
     async def watch_file_changes(self):
@@ -271,6 +295,7 @@ main(Connection({child_connection.fileno()}))"""
             capman.suspend(in_=True)
 
         self.collected_tests = await self.collect_tests()
+        self.selected_tests = self.collected_tests
 
         watcher = self.loop.create_task(self.watch_file_changes())
 
@@ -287,46 +312,31 @@ main(Connection({child_connection.fileno()}))"""
                 capman.resume()
 
 
-class Output:
+class Output(Console):
     """
     Abstract away terminal output handling.
     """
 
-    def __init__(self):
-        self._stream = sys.stdout
-
     def clear(self):
-        self._stream.write("\x1b[2J")
-        self._stream.write("\x1b[0;0H")
-        self._stream.flush()
+        self.file.write("\x1b[2J")
+        self.file.write("\x1b[0;0H")
+        self.file.flush()
 
     def clear_entire_line(self):
-        self._stream.write("\r\x1b[2K")
-        self._stream.flush()
+        self.file.write("\r\x1b[2K")
+        self.file.flush()
 
     def clear_below(self):
-        self._stream.write("\x1b[J")
-        self._stream.flush()
+        self.file.write("\x1b[J")
+        self.file.flush()
 
     def save_cursor(self):
-        self._stream.write("\x1b7")
-        self._stream.flush()
+        self.file.write("\x1b7")
+        self.file.flush()
 
     def restore_cursor(self):
-        self._stream.write("\x1b8")
-        self._stream.flush()
-
-    def print(self, text, fg=None, bold=False, end="\n"):
-        if not fg and not bold:
-            self._stream.write(f"{text}{end}")
-            return
-
-        self._stream.write(f"\x1b[{fg}m")
-        if bold:
-            self._stream.write("\x1b[1m")
-
-        self._stream.write(f"{text}\x1b[0m{end}")
-        self._stream.flush()
+        self.file.write("\x1b8")
+        self.file.flush()
 
 
 class Input:

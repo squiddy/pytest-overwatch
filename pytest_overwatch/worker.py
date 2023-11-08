@@ -1,7 +1,6 @@
 import sys
 import time
 
-import pytest
 from _pytest.config import Config
 from _pytest.terminal import TerminalReporter
 
@@ -69,6 +68,7 @@ class Reporter(TerminalReporter):
 
     Will be extended later.
     """
+
     def pytest_sessionstart(self, session):
         self._session = session
         self._sessionstarttime = time.time()

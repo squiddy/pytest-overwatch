@@ -1,23 +1,20 @@
 import asyncio
-import functools
 import os
 import pathlib
 import re
 import signal
-import subprocess
 import sys
 import termios
 import textwrap
-import time
 import tty
 from contextlib import contextmanager
-from multiprocessing import Pipe, Process
+from multiprocessing import Pipe
 
 from rich.console import Console
 from rich.style import Style
 from rich.theme import Theme
 
-SUPPORTS_INOTIFY = sys.platform.startswith('linux')
+SUPPORTS_INOTIFY = sys.platform.startswith("linux")
 if SUPPORTS_INOTIFY:
     from asyncinotify import Inotify, Mask
 
@@ -34,7 +31,10 @@ theme = Theme(
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--watch", action="store_true", dest="watch", default=False,
+        "--watch",
+        action="store_true",
+        dest="watch",
+        default=False,
     )
 
 
@@ -77,7 +77,7 @@ class Application:
             return
         else:
             try:
-                r = re.compile(self.testname_filter)
+                _ = re.compile(self.testname_filter)
             except Exception:
                 pass
             else:
@@ -236,7 +236,7 @@ main(Connection({child_connection.fileno()}))"""
                 self.output.print("pattern › ", style="text", end="")
 
             try:
-                r = re.compile(self.testname_filter)
+                _ = re.compile(self.testname_filter)
             except Exception:
                 filter_valid = False
             else:
@@ -261,7 +261,7 @@ main(Connection({child_connection.fileno()}))"""
                         f"  {filepath.parent}/[highlight]{filepath.name}[/]",
                         style="text",
                     )
-                
+
                 self.output.line()
                 self.output.print(
                     f"  [highlight]{len(self.selected_tests)}[/] matches",

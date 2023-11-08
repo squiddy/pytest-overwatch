@@ -1,3 +1,3 @@
 fix:
-	isort -rc pytest_overwatch
-	black pytest_overwatch
+	ruff check --fix pytest_overwatch
+	ruff format pytest_overwatch

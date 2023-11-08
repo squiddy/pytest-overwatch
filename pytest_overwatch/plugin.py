@@ -13,11 +13,13 @@ import tty
 from contextlib import contextmanager
 from multiprocessing import Pipe, Process
 
-from asyncinotify import Inotify, Mask
 from rich.console import Console
 from rich.style import Style
 from rich.theme import Theme
 
+SUPPORTS_INOTIFY = sys.platform.startswith('linux')
+if SUPPORTS_INOTIFY:
+    from asyncinotify import Inotify, Mask
 
 theme = Theme(
     {
@@ -268,6 +270,8 @@ main(Connection({child_connection.fileno()}))"""
             self.output.restore_cursor()
 
     async def watch_file_changes(self):
+        if not SUPPORTS_INOTIFY:
+            return
         with Inotify() as inotify:
             for directory, _, _ in os.walk(os.getcwd()):
                 # TODO How to best ignore things like .git, .pytest_cache etc?

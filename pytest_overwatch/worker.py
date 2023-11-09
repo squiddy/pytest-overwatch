@@ -1,11 +1,13 @@
 import sys
 import time
+from multiprocessing.connection import Connection
+from typing import Any
 
 from _pytest.config import Config
 from _pytest.terminal import TerminalReporter
 
 
-def main(connection):
+def main(connection: Connection) -> None:
     command, args, option_dict, *rest = connection.recv()
 
     config = Config.fromdictargs(option_dict, list(args))
@@ -23,17 +25,17 @@ def main(connection):
 
 
 class Session:
-    def __init__(self, config, connection):
+    def __init__(self, config: Config, connection: Connection) -> None:
         self.config = config
         self.connection = connection
 
         config.option.watch = False
         config.pluginmanager.register(self)
 
-    def main(self):
+    def main(self) -> None:
         self.config.hook.pytest_cmdline_main(config=self.config)
 
-    def pytest_plugin_registered(self, plugin, manager):
+    def pytest_plugin_registered(self, plugin: Any, manager: Any) -> None:
         """
         Replace default TerminalReporter with our own subclass of it.
         """
@@ -44,23 +46,26 @@ class Session:
             reporter = Reporter(self.config, sys.stdout)
             self.config.pluginmanager.register(reporter, name=name)
 
-    def pytest_collection_modifyitems(self, session, config, items):
+    def pytest_collection_modifyitems(
+        self, session: Any, config: Config, items: Any
+    ) -> None:
         if self.config.option.collectonly:
-            paths = {str(i.fspath) for i in items}
-            self.connection.send(list(paths))
+            paths = list({(str(i.fspath), str(i.nodeid)) for i in items})
+            paths.sort(key=lambda x: x[1])
+            self.connection.send(paths)
             return
 
-    def pytest_enter_pdb(self, config, pdb):
+    def pytest_enter_pdb(self, config: Config, pdb: Any) -> None:
         self.connection.send("enter_pdb")
 
-    def pytest_leave_pdb(self, config, pdb):
+    def pytest_leave_pdb(self, config: Config, pdb: Any) -> None:
         self.connection.send("leave_pdb")
 
-    def pytest_sessionfinish(self, session, exitstatus):
+    def pytest_sessionfinish(self, session: Any, exitstatus: Any) -> None:
         self.connection.send("sessionfinish")
 
 
-class Reporter(TerminalReporter):
+class Reporter(TerminalReporter):  # type: ignore
     """
     Currently disables some of the original reporters verbose output. Some of
     that could be controlled using the verbosity setting, but that would also
@@ -69,18 +74,18 @@ class Reporter(TerminalReporter):
     Will be extended later.
     """
 
-    def pytest_sessionstart(self, session):
+    def pytest_sessionstart(self, session: Any) -> None:
         self._session = session
         self._sessionstarttime = time.time()
 
-    def pytest_collection_finish(self, session):
+    def pytest_collection_finish(self, session: Any) -> None:
         pass
 
-    def pytest_collectreport(self, report):
+    def pytest_collectreport(self, report: Any) -> None:
         pass
 
-    def report_collect(self, final=False):
+    def report_collect(self, final: bool = False) -> None:
         pass
 
-    def pytest_collection(self):
+    def pytest_collection(self) -> None:
         pass

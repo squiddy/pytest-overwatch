@@ -4,21 +4,17 @@ import sys
 from dataclasses import dataclass
 from enum import Enum
 from multiprocessing import Pipe
-from typing import TYPE_CHECKING, Any
+from typing import Any, Generator
 
+from _pytest.config import Config
 from rich.text import Text
 from textual import on
 from textual.app import App, ComposeResult
 from textual.containers import Vertical, VerticalScroll
+from textual.events import Event
 from textual.message import Message
 from textual.screen import Screen
 from textual.widgets import Footer, Header, Input, LoadingIndicator, Static
-
-if TYPE_CHECKING:
-    from typing import Generator
-
-    from _pytest.config import Config
-    from textual.events import Event
 
 
 class FilterType(Enum):

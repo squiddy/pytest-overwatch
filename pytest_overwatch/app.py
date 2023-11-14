@@ -31,7 +31,7 @@ class TestsCollected(Message):
     tests: Any
 
 
-class Start(Screen):
+class Start(Screen[None]):
     TITLE = "Start"
     BINDINGS = [
         ("q", "quit", "Quit"),
@@ -49,12 +49,16 @@ class Start(Screen):
         self.run_worker(self.collect_tests(), thread=True)
 
     def on_tests_collected(self, event: Event) -> None:
-        self.app.tests = event.tests
+        self.app.tests = event.tests  # type: ignore
+        tests = self.app.tests  # type: ignore
+
         w = self.query_one(Vertical)
         w.remove_children()
-        w.mount(Static(f"{len(self.app.tests)} tests"))
+        w.mount(Static(f"{len(tests)} tests"))
 
     async def collect_tests(self) -> None:
+        config = self.app.config  # type: ignore
+
         connection, child_connection = Pipe()
         code = f"""
 from multiprocessing.connection import Connection
@@ -69,14 +73,14 @@ main(Connection({child_connection.fileno()}))"""
             stdout=asyncio.subprocess.DEVNULL,
             pass_fds=[child_connection.fileno()],
         )
-        connection.send(("collect", self.app.config.args, vars(self.app.config.option)))
+        connection.send(("collect", config.args, vars(config.option)))
 
         tests = connection.recv()
         await process.wait()
         self.post_message(TestsCollected(tests))
 
 
-class FilterTests(Screen):
+class FilterTests(Screen[None]):
     BINDINGS = [
         ("escape", "app.pop_screen", "Back"),
     ]
@@ -100,7 +104,9 @@ class FilterTests(Screen):
     def query_change(self, message: Any) -> None:
         self.update_results(list(self.filter_tests(message.value)))
 
-    def update_results(self, tests) -> None:
+    def update_results(self, tests: Any) -> None:
+        all_tests = self.app.tests  # type: ignore
+
         text = Text()
         for path, nodeid in tests:
             if self.filter_type == FilterType.BY_PATH:
@@ -110,20 +116,25 @@ class FilterTests(Screen):
             else:
                 raise Exception("unexpected filter type")
 
-        self.query_one("#result").update(text)
-        self.query_one("#stats").update(
-            f"Matching {len(tests)} / {len(self.app.tests)}"
+        self.query_one("#result", Static).update(text)
+        assert isinstance(self.app, Application)
+        self.query_one("#stats", Static).update(
+            f"Matching {len(tests)} / {len(all_tests)}"
         )
 
     def filter_tests(self, query: str) -> Generator[Any, None, None]:
+        tests = self.app.tests  # type: ignore
+
         matcher = re.compile(f".*{query}.*")
-        for path, nodeid in self.app.tests:
+        for path, nodeid in tests:
             if not matcher.match(nodeid):
                 continue
             yield (path, nodeid)
 
     def on_mount(self) -> None:
-        self.update_results(self.app.tests)
+        tests = self.app.tests  # type: ignore
+        self.update_results(tests)
+
         if self.filter_type == FilterType.BY_PATH:
             self.title = "Filter tests by path"
         elif self.filter_type == FilterType.BY_NAME:
@@ -139,7 +150,7 @@ class FilterTests(Screen):
         yield Footer()
 
 
-class RunTests(Screen):
+class RunTests(Screen[None]):
     TITLE = "Run tests"
     BINDINGS = [
         ("escape", "pop_screen", "Back"),
@@ -150,7 +161,7 @@ class RunTests(Screen):
         yield Footer()
 
 
-class Application(App):
+class Application(App[None]):
     TITLE = "pytest-watch"
     SCREENS = {
         "start": Start(),
